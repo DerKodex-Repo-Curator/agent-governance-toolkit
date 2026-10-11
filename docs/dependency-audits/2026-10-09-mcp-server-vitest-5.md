@@ -16,8 +16,9 @@ proposed registry-neutral lock is for draft evaluation only: hosted
 verification of the unchanged supply-chain gates and Node 22 installation
 is required before it can become ready for review or merge.
 
-Scope: `agent-governance-python/agent-os/extensions/mcp-server`, plus this
-required audit document. The baseline is main commit
+Scope: `agent-governance-python/agent-os/extensions/mcp-server`, this
+required audit document, and the existing dependency-confusion catalog
+and regression test file (eight files total). The baseline is main commit
 `17595e649abdfa703962c2f8c241826f68318109`.
 
 | Dependency | Baseline | Intended version | Reason |
@@ -28,8 +29,9 @@ required audit document. The baseline is main commit
 | `nanoid` | Transitive 3.3.16 | 3.3.19, lock-only | Fix a known advisory in the retained required Vite toolchain |
 
 No runtime dependency, other package, shared workflow, security policy, or
-validator is changed. The existing TypeScript 7 compiler and TypeScript 6
-compatibility aliases must remain unchanged.
+validator logic is changed. The only scanner change records the genuine
+registered name `vite` in its existing npm catalog. The existing TypeScript 7
+compiler and TypeScript 6 compatibility aliases remain unchanged.
 
 Both live diffs, complete paginated discussions and timelines, and resolved
 thread queries were read:
@@ -255,8 +257,9 @@ The canonical URLs for `node_modules/@typescript/native` (7.0.2),
 integrity values and approved declarations remain unchanged.
 
 These structural and tarball checks do not waive independent upstream
-registry verification. No scanner, alias rule, hash rule, allowlist,
-permission or conditional-approval requirement is changed.
+registry verification. No scanner logic, alias rule, hash rule, permission
+or conditional-approval requirement is changed; the npm registration catalog
+adds only the verified name `vite`, as explicitly authorized by the coordinator.
 
 Hosted evaluation of the initial proposed head
 `664e886ea92d14a2284aa734f24bea2ded785e68` supplied the missing independent
@@ -273,8 +276,9 @@ The two failures on that initial head were the missing registered-Vite
 catalog entry and spelling of ten genuine technical names. The latter is
 addressed by this document's exact local terminology declaration, following
 existing dependency-audit prior art, without disabling spelling checks or
-changing shared dictionaries. Latest-head hosted checks still must pass;
-the registered-name catalog prerequisite remains separately owned.
+changing shared dictionaries. Latest-head hosted checks still must pass.
+The coordinator subsequently authorized the narrow registered-name catalog
+correction in this replacement, as documented below.
 
 The unchanged gates were run on the committed proposal from the repository
 root. Network-dependent failures below are not successful verifications:
@@ -291,7 +295,10 @@ root. Network-dependent failures below are not successful verifications:
 | `python scripts\check_install_scripts.py --base origin/main --strict --max-deps 2000` | Blocked, exit 1: 24 candidates unverifiable through primary-registry TLS |
 | `python scripts\check_lockfile_integrity.py --base origin/main --max-deps 2000` | Blocked, exit 1: all 304 affected-entry findings are primary-registry network failures; zero alias/weak-digest findings |
 | `python scripts\check_dependency_scorecard.py --base-ref origin/main --head-ref HEAD --min-score 5.0 --max-deps 50` | Exit 0, warn-only: Vite score lookup remains TLS-unverified |
-| Scoped strict dependency-confusion command below | Failed, exit 1: the existing registered-name catalog omits `vite` |
+| Scoped strict dependency-confusion command below | Initially failed for the missing `vite` catalog entry; passed, exit 0 after the authorized correction |
+| `python scripts\check_dependency_confusion.py --strict` | Passed, exit 0: full unfiltered repository command matching CI |
+| `python -m pytest tests\ci\test_check_dependency_confusion.py scripts\tests\test_check_dependency_confusion.py -q` | Passed: 40 tests; before the catalog fix, four Vite acceptance cases failed and 36 tests passed |
+| `python -m ruff check --select E,F,W --ignore E501 scripts\check_dependency_confusion.py tests\ci\test_check_dependency_confusion.py` | Passed |
 
 ```powershell
 python scripts\check_dependency_confusion.py --strict agent-governance-python\agent-os\extensions\mcp-server\package.json agent-governance-python\agent-os\extensions\mcp-server\package-lock.json agent-governance-python\agent-os\extensions\mcp-server\README.md docs\dependency-audits\2026-10-09-mcp-server-vitest-5.md
@@ -312,24 +319,37 @@ pass; a draft is not permission to release a failing graph. Local TLS
 limitations and unsupported npm signing verification are disclosed rather
 than counted as successful checks.
 
-There is also a narrowly scoped shared catalog prerequisite:
-`REGISTERED_NPM_PACKAGES` in `scripts/check_dependency_confusion.py` omits
-the genuine registered package `vite`, although Vite 8.0.16 is already in
-main's transitive graph. CI runs this checker with `--strict`, so the
-necessary new explicit declaration will be rejected until a separately
-owned catalog correction records that verified package name and its
-regression coverage. This replacement does not edit the shared checker,
-add skip flags, remove Vite, or reduce check severity to hide the failure.
-The prerequisite has been reported to the coordinator for separate
-maintainer ownership.
+The coordinator explicitly authorized fixing the genuine registered-name
+omission in this PR after reviewing source and prior art. The change in
+`scripts/check_dependency_confusion.py` adds only `vite` to
+`REGISTERED_NPM_PACKAGES`. Vite 8.0.16 is already in main's transitive graph,
+and its npm publication, upstream package identity and installed bytes were
+verified during the dependency review. No new package is installed for
+this catalog correction.
+
+`tests/ci/test_check_dependency_confusion.py` adds four acceptance cases,
+covering `dependencies`, `devDependencies`, `peerDependencies`, and
+`optionalDependencies`, plus eight rejection cases for an unregistered
+lookalike and an unknown name across those same sections. Before the
+catalog change, all four real-Vite cases failed with the observed CI
+message while the other 36 tests passed. After adding the one catalog name,
+all 40 tests pass across both existing confusion test files. The affected
+manifest check and full `--strict` repository command both pass without
+filters or bypasses. AST comparison confirms all scanner logic, severity
+and CLI behavior unchanged, with only the one registered name added.
+MIT headers and trailing newlines remain intact.
+
+Hosted `dep-confusion-scan` and its aggregate `ci-complete` check must pass
+on the new head before considering the required-check failure resolved.
 
 ## Attribution, sources, and rollback
 
 Credit Dependabot for the original proposed upgrades and the #3960
 maintainer discussion for the Vite prerequisite. GitHub Copilot performed
-this user-directed investigation and implementation; human review and
-maintainer approval remain pending. No CLA or human-review attestation is
-made.
+this user-directed investigation and implementation. The author explicitly
+confirmed the PR's personal, AI Assistance, CLA and licensing attestations
+on 2026-10-11. Maintainer approval and required latest-head CI remain
+separate requirements; no self-approval or merge is performed.
 
 Sources inspected:
 
@@ -341,6 +361,7 @@ Sources inspected:
 - `https://github.com/vitest-dev/istanbuljs`
 - `https://github.com/advisories/GHSA-2v37-7h3g-55p8`
 - `https://github.com/ai/nanoid/tree/3.3.19`
+- `https://github.com/vitejs/vite/releases/tag/v8.0.16`
 
 If a future published update must be reverted, revert its scoped manifest
 and lockfile changes together, then repeat frozen installation and the

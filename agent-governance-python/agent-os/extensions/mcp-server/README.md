@@ -546,6 +546,17 @@ the installed runner/coverage versions, the explicit Vite dependency, and
 template-library behavior. Coverage exercises the imported template-library
 service; it is not a whole-server coverage claim.
 
+From the repository root, verify the explicit Vite entry in
+`scripts/check_dependency_confusion.py` and its scanner regression tests:
+
+```bash
+python -m pytest tests/ci/test_check_dependency_confusion.py scripts/tests/test_check_dependency_confusion.py -q
+python scripts/check_dependency_confusion.py --strict
+```
+
+The catalog recognizes the registered Vite package; unknown and lookalike
+names remain rejected in every npm dependency section.
+
 ## 📊 Performance
 
 | Metric | Target |
