@@ -4,7 +4,7 @@ last_reviewed: 2026-10-13
 owner: Ricky-G
 ---
 
-<!-- cspell:words vite jridgewell magicast obug picomatch tinybench tinyexec istanbuljs estree EALLOWREMOTE -->
+<!-- cspell:words vite jridgewell magicast obug picomatch tinybench tinyexec istanbuljs estree EALLOWREMOTE Gummadi -->
 
 # MCP server Vitest 5 consolidated dependency audit
 
@@ -402,6 +402,25 @@ MIT headers and trailing newlines remain intact.
 
 Hosted `dep-confusion-scan` and its aggregate `ci-complete` check must pass
 on the new head before considering the required-check failure resolved.
+
+Hosted review verification on
+`60c67aaa8a12a40790199e7ba90487064a323eec` confirms the corrected sources:
+the unchanged integrity job `115038673173` in run `38317854897` checked
+23 added or changed lock entries and matched their canonical URLs and
+SHA512 values against primary-registry metadata. This count is the
+validator's baseline diff, not a claim that it fetched all 307 versions
+anew. All 307 entries carry canonical URLs; the source-pinning regression
+checks every entry, and unchanged entries retain their existing source
+and digest metadata.
+
+The actual Node 22 job `115038927750` in run `38317855061` ran Vitest 5.0.3
+and passed all 17 tests. Release-age and install-script checks also passed
+on that head. The remaining failures were the expected independent catalog
+prerequisite and spelling of the author's genuine surname. The exact
+document-local proper-name declaration addresses spelling without a shared
+dictionary change or disabled check. The independent catalog approval and
+latest-head CI are still required; no completed aggregate CI result is
+claimed while they are pending.
 
 ## Attribution, sources, and rollback
 
