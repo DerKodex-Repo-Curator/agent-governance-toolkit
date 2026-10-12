@@ -23,8 +23,8 @@ maintainer approval remain required before merging.
 
 Scope: `agent-governance-python/agent-os/extensions/mcp-server`, this
 required audit document (six files total). The dependency-confusion catalog
-and its regression cases are being split into a separately reviewed
-prerequisite at the maintainer's request. The baseline is main commit
+and its regression cases have been split into the independently reviewed
+prerequisite #4293 at the maintainer's request. The baseline is main commit
 `17595e649abdfa703962c2f8c241826f68318109`.
 
 | Dependency | Baseline | Intended version | Reason |
@@ -376,7 +376,7 @@ verification remain disclosed rather than counted as successful checks;
 the earlier terminal result is not a substitute for latest-head verification.
 
 The earlier coordinator-authorized registered-name correction is being
-split from this PR for independent maintainer review. Its isolated change
+reviewed separately in #4293. Its isolated change
 in `scripts/check_dependency_confusion.py` adds only `vite` to
 `REGISTERED_NPM_PACKAGES`; neither that catalog nor its tests remain changed
 in this dependency PR. Vite 8.0.16 was already in main's transitive graph,
@@ -384,6 +384,8 @@ and its npm publication, upstream package identity and installed bytes were
 verified during the dependency review. No new package is installed for the
 catalog correction. The strict catalog gate remains mandatory and must
 pass after the independently reviewed prerequisite is incorporated.
+#4293 remains a separate approval and merge prerequisite, not a second
+maintainer acknowledgement or an exception to the catalog gate.
 
 The independent prerequisite's `tests/ci/test_check_dependency_confusion.py`
 adds four acceptance cases,
