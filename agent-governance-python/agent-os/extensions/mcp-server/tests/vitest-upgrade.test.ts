@@ -27,6 +27,25 @@ describe('Vitest toolchain', () => {
   test('installs Vite as an explicit development dependency', () => {
     expect(manifest.devDependencies).toHaveProperty('vite', viteVersion);
   });
+
+  test('pins every registry tarball to the canonical source with a strong digest', () => {
+    const lock: {
+      packages: Record<string, { resolved: string; integrity: string }>;
+    } = JSON.parse(readFileSync(
+      new URL('../package-lock.json', import.meta.url), 'utf-8',
+    ));
+
+    for (const [path, entry] of Object.entries(lock.packages)) {
+      if (!path) {
+        continue;
+      }
+      const source = new URL(entry.resolved);
+      expect(source.origin, path).toBe('https://registry.npmjs.org');
+      expect(source.username, path).toBe('');
+      expect(source.password, path).toBe('');
+      expect(entry.integrity, path).toMatch(/^sha512-[A-Za-z0-9+/]+={0,2}$/);
+    }
+  });
 });
 
 describe('TemplateLibrary under Vitest', () => {

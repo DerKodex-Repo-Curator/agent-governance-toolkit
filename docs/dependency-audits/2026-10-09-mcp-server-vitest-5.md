@@ -1,6 +1,6 @@
 ---
 title: MCP server Vitest 5 consolidated dependency audit
-last_reviewed: 2026-10-09
+last_reviewed: 2026-10-13
 owner: Ricky-G
 ---
 
@@ -11,14 +11,20 @@ owner: Ricky-G
 ## Which dependencies changed and why
 
 This is the user-approved consolidation of Dependabot PRs #3960 and #4117,
-not two competing lockfile updates. Both originals remain open. This
-proposed registry-neutral lock is for draft evaluation only: hosted
-verification of the unchanged supply-chain gates and Node 22 installation
-is required before it can become ready for review or merge.
+not two competing lockfile updates. Both originals were closed as superseded
+on 2026-10-11, with their exact branches and head commits retained.
+The replacement left draft on that date after all checks, including Docker
+and `ci-complete`, passed on head
+`8c6f12f0745a2557563de53de28156cf169ebcca`. The subsequent maintainer review
+requested the follow-up changes recorded below. The PR was returned to
+draft on 2026-10-13 while the canonical-source review fixes are verified;
+this does not reopen the superseded originals. Latest-head checks and
+maintainer approval remain required before merging.
 
 Scope: `agent-governance-python/agent-os/extensions/mcp-server`, this
-required audit document, and the existing dependency-confusion catalog
-and regression test file (eight files total). The baseline is main commit
+required audit document (six files total). The dependency-confusion catalog
+and its regression cases are being split into a separately reviewed
+prerequisite at the maintainer's request. The baseline is main commit
 `17595e649abdfa703962c2f8c241826f68318109`.
 
 | Dependency | Baseline | Intended version | Reason |
@@ -29,9 +35,10 @@ and regression test file (eight files total). The baseline is main commit
 | `nanoid` | Transitive 3.3.16 | 3.3.19, lock-only | Fix a known advisory in the retained required Vite toolchain |
 
 No runtime dependency, other package, shared workflow, security policy, or
-validator logic is changed. The only scanner change records the genuine
-registered name `vite` in its existing npm catalog. The existing TypeScript 7
-compiler and TypeScript 6 compatibility aliases remain unchanged.
+validator logic is changed. This PR does not modify the registered-name
+catalog or its tests; their independent review is a prerequisite for the
+explicit Vite dependency. The existing TypeScript 7 compiler and TypeScript 6
+compatibility aliases remain unchanged.
 
 Both live diffs, complete paginated discussions and timelines, and resolved
 thread queries were read:
@@ -131,8 +138,9 @@ vulnerabilities.
 
 Vitest 5 requires Node.js `^22.12.0 || ^24.0.0 || >=26.0.0` and Vite
 `^6.4.0 || ^7.0.0 || ^8.0.0`. Local validation uses Node 26.7.0 and npm
-12.0.2; existing package CI uses Node 22. Hosted Node 22 verification is
-still required. Production runtime engine declarations are not changed.
+12.0.2; existing package CI uses Node 22. Hosted Node 22 verification passed
+on the pre-review head and must pass again after the review changes.
+Production runtime engine declarations are not changed.
 
 The package has no pre-existing tests, custom Vitest configuration,
 browser environment, snapshots, mocks, deprecated runner imports, or
@@ -140,13 +148,18 @@ coverage thresholds to migrate. The upstream migration guide was
 reviewed for changed mock defaults, removed entry points, precise coverage
 globs, and configuration lookup behavior.
 
-The new 16-test suite checks actual installed runner/coverage versions,
+The original 16-test suite checks actual installed runner/coverage versions,
 the explicit Vite dependency, and real template-library behavior, including
 filtering, search, unknown inputs, suggestions and compliance frameworks.
 It contains no production changes or mocks. On the baseline, 14 behavior
 tests pass and exactly two toolchain regressions fail. After upgrading,
 all 16 pass with real V8 coverage. Empty test discovery no longer succeeds,
 coverage runs once instead of entering watch mode, and lint includes tests.
+The review follow-up adds a seventeenth regression requiring every non-root
+lock entry to carry a canonical registry source and a strong digest.
+Before source restoration, it fails on the missing `resolved` field while
+all 16 original tests pass. After canonical source restoration, all 17 tests
+pass with the same dependency versions and package bytes.
 
 ## Validation evidence
 
@@ -155,6 +168,7 @@ Package commands are run from the MCP server directory.
 | Command | Baseline result | Actual upgraded graph result |
 |---|---|---|
 | `npm ci --legacy-peer-deps --ignore-scripts` | Passed | Passed cleanly on the exact final 307-package SHA512 lock; lock unchanged |
+| `npm ci --ignore-scripts` | Not run on baseline | Passed on the reviewed graph; local development instructions now retain peer validation |
 | `npm run build` | Passed | Passed |
 | `npm test` | Passed with zero tests; new suite fails the two intended regressions | 16/16 passed |
 | `npm run lint` | Passed | Passed, including new tests |
@@ -183,12 +197,21 @@ The new test file also passes strict TypeScript 7 checking:
 the existing package configuration was separately checked by the normal
 build and typecheck commands.
 
-The final frozen install preserved the lockfile's SHA256:
+The pre-review frozen install preserved the lockfile's SHA256:
 `90cc658af0af3ba84e4c6777afd440566d59bf60979b1cb84aa2ab386aa57199`.
 All functional commands above were rerun against this exact final lock,
 not only against an earlier experimental representation.
 
-## Proposed registry-neutral format and remaining hosted gates
+The canonical review-fix lock has SHA256
+`cd056799a544f7d469c48af71e2a627179600ee73e75b7c9d08ad69b729fb745`.
+`npm ci --ignore-scripts` passes without `--legacy-peer-deps` and leaves
+that file unchanged. Build, lint, package and test-file typechecking,
+`npm test` (17/17), `npm run test:coverage` (17/17), the exact installed
+dependency-tree check, and `npm audit --json` (zero vulnerabilities) pass
+on this canonical file. The template-library coverage figures are unchanged.
+The source-pinning regression is neither disabled nor relaxed.
+
+## Source provenance and canonical-registry review follow-up
 
 The configured registry is `https://packagefeedproxy.microsoft.io/npm/`.
 Its version metadata emits environment-specific Microsoft feed tarball
@@ -203,8 +226,8 @@ representation was correctly rejected: it lost required canonical
 resolved URLs for three existing TypeScript aliases, and mirror metadata
 produced 16 SHA1-only entries. It was not committed.
 
-The user subsequently approved a registry-neutral format only with all
-existing checks passing. The final proposed representation retains
+The user initially approved a registry-neutral format only with all
+existing checks passing. That pre-review representation retained
 the three existing aliases' canonical URLs verbatim from main and preserves
 exact same-package/version SHA512 values already present in main or the
 two original npm-generated Dependabot locks. All corroborating sources
@@ -215,9 +238,40 @@ restore a stale full lockfile.
 All 16 corresponding raw tarballs in npm's existing content-addressed cache
 were independently read, SHA512-checked, and checked for matching embedded
 package names and versions without extraction or execution. All 16 matched.
-This yields 307 SHA512 entries and zero findings from the unchanged
+That yielded 307 SHA512 entries and zero findings from the unchanged
 integrity/alias parser. A clean ordinary frozen install then verified the
 actual final representation and its package bytes successfully.
+
+The maintainer subsequently requested explicit canonical `resolved` URLs
+for every entry so the existing guard verifies sources as well as hashes.
+The review fix restores all 307 source fields from actual, exact-version
+native npm metadata: 300 canonical values from existing immutable repository
+locks and seven verbatim canonical values from immutable published npm locks.
+No version, integrity value, alias declaration, dependency edge, scanner,
+workflow, registry setting, TLS setting, or remote-fetch permission changes.
+
+The seven affected exact versions are `@babel/parser@7.29.9`,
+`@vitest/coverage-v8@5.0.3`, `@vitest/istanbul-lib-coverage@1.0.2`,
+`@vitest/istanbul-lib-report@1.0.2`, `ast-v8-to-istanbul@1.0.7`,
+`nanoid@3.3.19`, and `tinyrainbow@3.2.0`. Their existing SHA512 values already
+match the independently reviewed package bytes. Their URL fields are copied
+only after exact package-name, version, and SHA512 comparison, not inferred
+from the package name or constructed by replacing a mirror prefix.
+Native npm regenerates the resulting locked graph offline with the primary
+registry selected. Every package retains its canonical source URL and
+original strong digest.
+
+Read-only immutable published npm locks supply all seven canonical URL
+fields and corroborate their SHA512 values without constructing URLs. Evidence is
+retained by commit and blob: `cf423fc719c61da61060821472ee5ea237586015` /
+`f45c683d08b44336dd08adc2a7e712756393f81f`, with five entries independently
+corroborated by `109bb578cc04a668e32844704ed9e5e9ce5f40d1` /
+`acaa13323c0d0a874e0dbd23471d5038152af4ad`. That corroboration does not
+replace the required hosted primary-registry URL comparison. Local primary
+registry access remains blocked, and the third-party locks are explicitly
+not described as an independent primary-registry approval. The unchanged
+hosted integrity guard must compare restored sources and digests against
+the registry on the new head before this review item is considered complete.
 
 For provenance, the source labels below identify immutable npm-generated
 lockfile blobs at the existing MCP server path:
@@ -277,8 +331,9 @@ catalog entry and spelling of ten genuine technical names. The latter is
 addressed by this document's exact local terminology declaration, following
 existing dependency-audit prior art, without disabling spelling checks or
 changing shared dictionaries. Latest-head hosted checks still must pass.
-The coordinator subsequently authorized the narrow registered-name catalog
-correction in this replacement, as documented below.
+The coordinator initially authorized the narrow registered-name correction
+in this replacement. It is now being moved to an independent prerequisite
+at the maintainer's request, as documented below.
 
 The unchanged gates were run on the committed proposal from the repository
 root. Network-dependent failures below are not successful verifications:
@@ -312,22 +367,26 @@ Configured-mirror age evidence is not described as a passing primary-registry
 gate. Npm signing attestations and historical maintainer continuity cannot
 be independently verified through this mirror.
 
-Required next step: run the unchanged integrity, release-age, install-script,
-dependency-review and Node 22 checks in hosted CI on the latest proposed head.
-Keep the PR in draft and both originals open until those checks really
-pass; a draft is not permission to release a failing graph. Local TLS
-limitations and unsupported npm signing verification are disclosed rather
-than counted as successful checks.
+Both originals are closed following terminal successful CI on 2026-10-11.
+The replacement is temporarily in draft for the current review fixes.
+Run the unchanged integrity, release-age, install-script, dependency-review
+and Node 22 checks again on the final review-fix head, after primary URL
+and digest comparisons complete. Local TLS limitations and unsupported npm signing
+verification remain disclosed rather than counted as successful checks;
+the earlier terminal result is not a substitute for latest-head verification.
 
-The coordinator explicitly authorized fixing the genuine registered-name
-omission in this PR after reviewing source and prior art. The change in
-`scripts/check_dependency_confusion.py` adds only `vite` to
-`REGISTERED_NPM_PACKAGES`. Vite 8.0.16 is already in main's transitive graph,
+The earlier coordinator-authorized registered-name correction is being
+split from this PR for independent maintainer review. Its isolated change
+in `scripts/check_dependency_confusion.py` adds only `vite` to
+`REGISTERED_NPM_PACKAGES`; neither that catalog nor its tests remain changed
+in this dependency PR. Vite 8.0.16 was already in main's transitive graph,
 and its npm publication, upstream package identity and installed bytes were
-verified during the dependency review. No new package is installed for
-this catalog correction.
+verified during the dependency review. No new package is installed for the
+catalog correction. The strict catalog gate remains mandatory and must
+pass after the independently reviewed prerequisite is incorporated.
 
-`tests/ci/test_check_dependency_confusion.py` adds four acceptance cases,
+The independent prerequisite's `tests/ci/test_check_dependency_confusion.py`
+adds four acceptance cases,
 covering `dependencies`, `devDependencies`, `peerDependencies`, and
 `optionalDependencies`, plus eight rejection cases for an unregistered
 lookalike and an unknown name across those same sections. Before the
@@ -348,7 +407,10 @@ Credit Dependabot for the original proposed upgrades and the #3960
 maintainer discussion for the Vite prerequisite. GitHub Copilot performed
 this user-directed investigation and implementation. The author explicitly
 confirmed the PR's personal, AI Assistance, CLA and licensing attestations
-on 2026-10-11. Maintainer approval and required latest-head CI remain
+on 2026-10-11. On 2026-10-13, the author explicitly authorized preserving
+Microsoft commit-author attribution and adding the personal
+`Signed-off-by: Ricky Gummadi <ricky.gummadi@outlook.com>` trailer to new
+forward commits. Public history is not amended. Maintainer approval and required latest-head CI remain
 separate requirements; no self-approval or merge is performed.
 
 Sources inspected:
@@ -362,6 +424,8 @@ Sources inspected:
 - `https://github.com/advisories/GHSA-2v37-7h3g-55p8`
 - `https://github.com/ai/nanoid/tree/3.3.19`
 - `https://github.com/vitejs/vite/releases/tag/v8.0.16`
+- `https://github.com/Uxsx/engse203-student-labs-68543210045/blob/cf423fc719c61da61060821472ee5ea237586015/labs/week-12/source/api/package-lock.json.org`
+- `https://github.com/sababado/fullstack-template-rep/blob/109bb578cc04a668e32844704ed9e5e9ce5f40d1/template/package-lock.json.jinja`
 
 If a future published update must be reverted, revert its scoped manifest
 and lockfile changes together, then repeat frozen installation and the

@@ -477,7 +477,9 @@ All data is stored locally in the `AGENTOS_DATA_DIR`:
 Development tooling requires Node.js `^22.12.0`, `^24.0.0`, or `>=26.0.0`
 for Vitest 5. Keep `vitest` and `@vitest/coverage-v8` on the same exact
 version. Vite is an explicit development dependency because Vitest 5 makes
-it a required peer dependency; CI installs with `--legacy-peer-deps`.
+it a required peer dependency. Local frozen installs validate peer
+dependencies; the shared CI job still uses `--legacy-peer-deps` as its
+repository-wide compatibility setting.
 
 ```bash
 # Clone the repository
@@ -485,7 +487,7 @@ git clone https://github.com/microsoft/agent-governance-toolkit
 cd agent-governance-python/agent-os/extensions/mcp-server
 
 # Install dependencies
-npm ci --legacy-peer-deps --ignore-scripts
+npm ci --ignore-scripts
 
 # Build
 npm run build
@@ -545,17 +547,6 @@ Both commands run once and fail if no tests are discovered. The suite checks
 the installed runner/coverage versions, the explicit Vite dependency, and
 template-library behavior. Coverage exercises the imported template-library
 service; it is not a whole-server coverage claim.
-
-From the repository root, verify the explicit Vite entry in
-`scripts/check_dependency_confusion.py` and its scanner regression tests:
-
-```bash
-python -m pytest tests/ci/test_check_dependency_confusion.py scripts/tests/test_check_dependency_confusion.py -q
-python scripts/check_dependency_confusion.py --strict
-```
-
-The catalog recognizes the registered Vite package; unknown and lookalike
-names remain rejected in every npm dependency section.
 
 ## 📊 Performance
 
