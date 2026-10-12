@@ -1274,7 +1274,6 @@ jobs:
     if: needs.changes.outputs.studio == 'true' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     env:
-      AGT_STUDIO_TEST_WHEELHOUSE: ${{ runner.temp }}/studio-wheelhouse
       AGT_ENGINE_API_REQUIRE_REPLAY: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1295,6 +1294,7 @@ jobs:
           echo "00d114b94fdb1606a48cccdfc73c9ccdc62c38721150131ae578d5ff3df5c084  $RUNNER_TEMP/opa" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/opa"
           echo "ACS_OPA_PATH=$RUNNER_TEMP/opa" >> "$GITHUB_ENV"
+          echo "AGT_STUDIO_TEST_WHEELHOUSE=$RUNNER_TEMP/studio-wheelhouse" >> "$GITHUB_ENV"
       - name: Build and install the canonical Studio production wheelhouse
         run: |
           set -euo pipefail

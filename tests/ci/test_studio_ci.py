@@ -66,7 +66,15 @@ def test_studio_job_runs_real_language_gates_and_reports_to_ci_complete() -> Non
         assert command in commands
     assert "--junitxml=/tmp/agt-studio-python.xml" in commands
     assert studio["env"]["AGT_ENGINE_API_REQUIRE_REPLAY"] == "1"
-    assert studio["env"]["AGT_STUDIO_TEST_WHEELHOUSE"] == "${{ runner.temp }}/studio-wheelhouse"
+    assert "AGT_STUDIO_TEST_WHEELHOUSE" not in studio["env"]
+    setup = next(
+        step for step in studio["steps"]
+        if step.get("name") == "Install verified OPA for the real Studio replay backend"
+    )
+    assert (
+        'echo "AGT_STUDIO_TEST_WHEELHOUSE=$RUNNER_TEMP/studio-wheelhouse" >> "$GITHUB_ENV"'
+        in setup["run"]
+    )
     assert "--reporter=junit --outputFile.junit=/tmp/agt-studio-frontend.xml" in commands
     assert "No Studio tests executed" in commands
     assert '".text-3xl" in styles[0].read_text(encoding="utf-8")' in commands
