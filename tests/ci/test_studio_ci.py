@@ -20,7 +20,14 @@ def test_studio_path_filter_is_separate_from_existing_package_matrices() -> None
     filters = yaml.safe_load(filter_step["with"]["filters"])
 
     assert changes["outputs"]["studio"] == "${{ steps.filter.outputs.studio }}"
-    assert filters["studio"] == ["agent-governance-studio/**", ".github/workflows/ci.yml"]
+    assert filters["studio"] == [
+        "agent-governance-studio/**",
+        "agent-governance-python/agent-mesh/src/agentmesh/engine_api/**",
+        "agent-governance-python/agent-compliance/src/agent_compliance/policy_test.py",
+        "agent-governance-python/agent-compliance/pyproject.toml",
+        "agent-governance-python/agent-governance-toolkit-core/pyproject.toml",
+        ".github/workflows/ci.yml",
+    ]
     for name in ("python", "typescript", "integrations", "dotnet", "rust", "go"):
         assert "agent-governance-studio/**" not in filters[name]
     assert "studio" not in changes["outputs"]["changed-py-pkgs"]
@@ -47,7 +54,10 @@ def test_studio_job_runs_real_language_gates_and_reports_to_ci_complete() -> Non
         "ruff check agent-governance-studio/src agent-governance-studio/tests",
         "python -m pytest agent-governance-studio/tests -q",
         "python -m build --no-isolation agent-governance-studio",
-        "python -m pip install --no-deps agent-governance-studio/dist/*.whl",
+        "agent-governance-studio==5.0.0",
+        "python -m pip download --dest",
+        "-c agent-governance-studio/runtime-constraints.txt",
+        "python -m pytest tests/engine_api/ -q",
         "npm ci --ignore-scripts --prefix agent-governance-studio/web",
         "npm run lint --prefix agent-governance-studio/web",
         "npm test --prefix agent-governance-studio/web",
@@ -55,6 +65,8 @@ def test_studio_job_runs_real_language_gates_and_reports_to_ci_complete() -> Non
     ):
         assert command in commands
     assert "--junitxml=/tmp/agt-studio-python.xml" in commands
+    assert studio["env"]["AGT_ENGINE_API_REQUIRE_REPLAY"] == "1"
+    assert studio["env"]["AGT_STUDIO_TEST_WHEELHOUSE"] == "${{ runner.temp }}/studio-wheelhouse"
     assert "--reporter=junit --outputFile.junit=/tmp/agt-studio-frontend.xml" in commands
     assert "No Studio tests executed" in commands
     assert '".text-3xl" in styles[0].read_text(encoding="utf-8")' in commands
