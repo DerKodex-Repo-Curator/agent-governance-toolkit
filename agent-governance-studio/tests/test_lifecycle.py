@@ -13,6 +13,22 @@ import httpx
 import pytest
 
 
+def test_shutdown_signals_are_consumed_and_previous_handlers_restored():
+    from agent_governance_studio.server import _shutdown_signals
+
+    previous = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
+    received = []
+
+    def handle(signum, _frame):
+        received.append(signum)
+
+    with _shutdown_signals(handle):
+        signal.raise_signal(signal.SIGTERM)
+        signal.raise_signal(signal.SIGINT)
+    assert received == [signal.SIGTERM, signal.SIGINT]
+    assert {signum: signal.getsignal(signum) for signum in previous} == previous
+
+
 def unused_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

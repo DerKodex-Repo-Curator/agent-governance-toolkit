@@ -5,12 +5,26 @@
 import asyncio
 import signal
 import socket
+from contextlib import contextmanager
 
 import click
 import uvicorn
 
 from .application import create_sidecar
 from .config import Configuration, ConfigurationError
+
+
+@contextmanager
+def _shutdown_signals(handler):
+    originals = {
+        signum: signal.signal(signum, handler)
+        for signum in (signal.SIGINT, signal.SIGTERM)
+    }
+    try:
+        yield
+    finally:
+        for signum, original in originals.items():
+            signal.signal(signum, original)
 
 
 async def serve(config: Configuration, *, quiet: bool = False) -> None:
@@ -45,6 +59,10 @@ async def serve(config: Configuration, *, quiet: bool = False) -> None:
             ) from None
 
         class Server(uvicorn.Server):
+            def capture_signals(self):
+                # Graceful shutdown is a successful foreground exit, not a re-raised signal.
+                return _shutdown_signals(self.handle_exit)
+
             async def startup(self, sockets=None):
                 await super().startup(sockets)
                 if self.started and not quiet:

@@ -1,6 +1,6 @@
 ---
 title: "Studio loopback sidecar (draft)"
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-13
 owner: studio-team
 ---
 
@@ -172,7 +172,9 @@ projection. The canonical contract/schema assertions are not weakened.
 
 Ctrl+C / graceful termination stops accepting requests, cancels owned work,
 kills the entire request process tree, reaps it, removes request/snapshot scratch
-storage and releases the port. Windows uses kill-on-close Job Objects;
+storage and releases the port. The foreground sidecar consumes graceful SIGINT
+and SIGTERM after cleanup and exits successfully, restoring prior signal handlers
+instead of re-raising a shutdown signal. Windows uses kill-on-close Job Objects;
 POSIX uses owned process sessions. Windows console Ctrl+Break is also supported
 for targeted graceful termination. Immediate OS force-kill/power loss cannot
 guarantee Python scratch cleanup; Windows Jobs still contain/terminate descendants.
