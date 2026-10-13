@@ -1298,7 +1298,7 @@ jobs:
       - name: Build and install the canonical Studio production wheelhouse
         run: |
           set -euo pipefail
-          python -m pip install --no-cache-dir maturin==1.8.7 hatchling==1.28.0
+          python -m pip install --no-cache-dir maturin==1.8.7 hatchling==1.28.0 wheel==0.46.3
           python -m pip wheel --no-deps --no-build-isolation --wheel-dir "$RUNNER_TEMP/studio-wheels" ./policy-engine/sdk/python
           python -m build --no-isolation --wheel --outdir "$RUNNER_TEMP/studio-wheels" agent-governance-python/agent-governance-toolkit-core
           python -m build --no-isolation --wheel --outdir "$RUNNER_TEMP/studio-wheels" agent-governance-python/agent-compliance

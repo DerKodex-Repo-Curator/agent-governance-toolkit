@@ -64,6 +64,15 @@ def test_studio_job_runs_real_language_gates_and_reports_to_ci_complete() -> Non
         "npm run build --prefix agent-governance-studio/web",
     ):
         assert command in commands
+    wheelhouse = next(
+        step for step in studio["steps"]
+        if step.get("name") == "Build and install the canonical Studio production wheelhouse"
+    )["run"]
+    build_tools = "python -m pip install --no-cache-dir maturin==1.8.7 hatchling==1.28.0 wheel==0.46.3"
+    assert build_tools in wheelhouse
+    assert wheelhouse.index(build_tools) < wheelhouse.index(
+        "agent-governance-python/agent-compliance"
+    )
     assert "--junitxml=/tmp/agt-studio-python.xml" in commands
     assert studio["env"]["AGT_ENGINE_API_REQUIRE_REPLAY"] == "1"
     assert "AGT_STUDIO_TEST_WHEELHOUSE" not in studio["env"]
