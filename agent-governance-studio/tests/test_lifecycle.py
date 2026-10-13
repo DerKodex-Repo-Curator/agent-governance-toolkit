@@ -49,9 +49,10 @@ def wait_ready(process, origin):
                     assert response.json()["status"] == "ok"
                     return client.get("/api/v1/versions").json()
             except httpx.TransportError:
+                # The listener may not be bound yet; retry only until the readiness deadline.
                 pass
             time.sleep(0.05)
-    pytest.fail("No real HTTP readiness within fifteen seconds.")
+    raise AssertionError("No real HTTP readiness within fifteen seconds.")
 
 
 def test_real_listener_replay_shutdown_release_restart(tmp_path, policy_root):
@@ -152,11 +153,13 @@ def test_clean_wheel_install_outside_checkout(tmp_path, policy_root):
         assert result.returncode == 0 and "serve" in result.stdout
     result = subprocess.run(
         [str(python), "-I", "-c",
-         "from importlib.metadata import distribution; from pathlib import Path;"
-         "import agentmesh.engine_api,agent_compliance.policy_test,agent_governance_studio;"
-         "assert any(str(p)=='agentmesh/engine_api/app.py' for p in distribution('agent-governance-toolkit-core').files);"
-         "assert Path(agentmesh.engine_api.__file__).is_relative_to(Path(__import__('sys').prefix));"
-         "print(agent_governance_studio.__file__)"],
+         "".join([
+             "from importlib.metadata import distribution; from pathlib import Path;",
+             "import agentmesh.engine_api,agent_compliance.policy_test,agent_governance_studio;",
+             "assert any(str(p)=='agentmesh/engine_api/app.py' for p in distribution('agent-governance-toolkit-core').files);",
+             "assert Path(agentmesh.engine_api.__file__).is_relative_to(Path(__import__('sys').prefix));",
+             "print(agent_governance_studio.__file__)",
+         ])],
         cwd=tmp_path, capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stderr

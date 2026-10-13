@@ -18,7 +18,7 @@ class ProcessTree:
         if os.name != "nt":
             return
         import ctypes
-        from ctypes import wintypes
+        import ctypes.wintypes as wintypes
 
         class BasicLimit(ctypes.Structure):
             _fields_ = [
@@ -100,7 +100,7 @@ class ProcessTree:
         if self.handle is None:
             return
         import ctypes
-        from ctypes import wintypes
+        import ctypes.wintypes as wintypes
 
         class Accounting(ctypes.Structure):
             _fields_ = [("times", ctypes.c_int64 * 4), ("counts", wintypes.DWORD * 4)]
@@ -130,6 +130,7 @@ async def reap(process: asyncio.subprocess.Process, tree: ProcessTree | None) ->
         try:
             process.kill()
         except ProcessLookupError:
+            # Exit can race with termination; still reap the complete owned tree below.
             pass
     async def wait_all():
         await process.wait()

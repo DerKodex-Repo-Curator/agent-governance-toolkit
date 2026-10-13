@@ -38,7 +38,7 @@ def alive(pid):
             return not (status.exists() and status.read_text(encoding="utf-8").split()[2] == "Z")
         except ProcessLookupError:
             return False
-    from ctypes import wintypes
+    import ctypes.wintypes as wintypes
 
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
