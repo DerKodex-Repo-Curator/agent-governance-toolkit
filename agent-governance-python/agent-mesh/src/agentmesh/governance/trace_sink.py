@@ -101,6 +101,7 @@ def _snapshot_to_trust_record(
 
     bp_digest = config.build_provenance_digest or measurement
 
+    # Unanchored Level 0/1 records omit the optional transparency receipt URI.
     record: dict[str, Any] = {
         "eat_profile": TRACE_EAT_PROFILE,
         "iat": iat,

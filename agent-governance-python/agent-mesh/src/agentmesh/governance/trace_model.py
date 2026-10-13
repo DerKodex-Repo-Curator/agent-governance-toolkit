@@ -104,6 +104,7 @@ def session_to_trust_record(session: TraceSession, config: TraceModelConfig) -> 
         data_class=session.data_class,
         build_provenance=config.build_provenance,
         appraisal={"status": appraisal_status, "verifier": config.verifier},
+        # Unanchored Level 0/1 records omit this optional receipt URI from the payload.
         transparency=None,
         tool_transcript={"hash": _jcs_hash(entries), "call_count": call_count},
     )
