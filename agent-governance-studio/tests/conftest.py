@@ -5,6 +5,8 @@
 import importlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,6 +24,16 @@ rules:
     condition: {field: action, operator: eq, value: read}
     action: allow
 """
+
+
+@pytest.fixture(scope="session")
+def slow_opa(tmp_path_factory):
+    executable = tmp_path_factory.mktemp("slow-native") / ("slow.exe" if os.name == "nt" else "slow")
+    subprocess.run(
+        ["rustc", str(Path(__file__).parent / "fixtures" / "slow_opa.rs"), "-o", str(executable)],
+        check=True, capture_output=True, timeout=60,
+    )
+    return executable
 
 
 @pytest.fixture(scope="session")

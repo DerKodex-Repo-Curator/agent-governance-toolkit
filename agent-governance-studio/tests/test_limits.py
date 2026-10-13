@@ -5,7 +5,6 @@ import asyncio
 import ctypes
 import json
 import os
-import subprocess
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -18,16 +17,6 @@ from agent_governance_studio.config import Configuration, ConfigurationError, Li
 from conftest import POLICY
 
 HEADERS = {"Origin": "http://127.0.0.1:8080", "X-AGT-Studio-Request": "1"}
-
-
-@pytest.fixture(scope="session")
-def slow_opa(tmp_path_factory):
-    executable = tmp_path_factory.mktemp("slow-native") / ("slow.exe" if os.name == "nt" else "slow")
-    subprocess.run(
-        ["rustc", str(Path(__file__).parent / "fixtures" / "slow_opa.rs"), "-o", str(executable)],
-        check=True, capture_output=True, timeout=60,
-    )
-    return executable
 
 
 def alive(pid):

@@ -12,7 +12,6 @@ import pytest
 
 from test_lifecycle import launch, stop, unused_port, wait_ready
 from test_limits import alive, wait_marker
-from test_limits import slow_opa as slow_opa
 
 
 @pytest.mark.asyncio
