@@ -79,6 +79,7 @@ class GovernanceSkill:
         shell: bool = False,
         cwd: Any = None,
         context: Mapping[str, Any] | None = None,
+        executable: Any = None,
     ) -> tuple[Any, InterventionPointResult]:
         # Evaluate and execute one immutable value: a caller's list could
         # otherwise change between approval and execution.
@@ -87,7 +88,7 @@ class GovernanceSkill:
         command_context = dict(self.context)
         command_context.update(context or {})
         target: dict[str, Any] = {
-            "executable": Path(args[0]).name if args else "",
+            "executable": _policy_executable(args, shell=shell, executable=executable),
             "argv": args,
             "command": _command_text(command),
             "shell": shell,
@@ -192,7 +193,12 @@ def _deactivate_shell_interception(skill: GovernanceSkill) -> None:
 
 
 def _authorize_active_shell(
-    command: Any, *, api: str, shell: bool = False, cwd: Any = None
+    command: Any,
+    *,
+    api: str,
+    shell: bool = False,
+    cwd: Any = None,
+    executable: Any = None,
 ) -> Any:
     if getattr(_SHELL_PATCH_LOCAL, "bypass", False):
         return command
@@ -201,7 +207,7 @@ def _authorize_active_shell(
         return command
     skill, context = stack[-1]
     transformed, _ = skill.authorize_shell_command(
-        command, api=api, shell=shell, cwd=cwd, context=context
+        command, api=api, shell=shell, cwd=cwd, context=context, executable=executable
     )
     return transformed
 
@@ -219,12 +225,15 @@ def _governed_subprocess_run(*popenargs: Any, **kwargs: Any) -> Any:
     originals = _SHELL_ORIGINALS
     if "cwd" in kwargs:
         kwargs["cwd"] = _freeze_cwd(kwargs["cwd"])
+    if "executable" in kwargs:
+        kwargs["executable"] = _freeze_executable(kwargs["executable"])
     command = popenargs[0] if popenargs else kwargs.get("args")
     command = _authorize_active_shell(
         command,
         api="subprocess.run",
         shell=bool(kwargs.get("shell", False)),
         cwd=kwargs.get("cwd"),
+        executable=kwargs.get("executable"),
     )
     if popenargs:
         popenargs = (command, *popenargs[1:])
@@ -239,12 +248,15 @@ def _governed_subprocess_popen(*popenargs: Any, **kwargs: Any) -> Any:
         return originals["subprocess.Popen"](*popenargs, **kwargs)
     if "cwd" in kwargs:
         kwargs["cwd"] = _freeze_cwd(kwargs["cwd"])
+    if "executable" in kwargs:
+        kwargs["executable"] = _freeze_executable(kwargs["executable"])
     command = popenargs[0] if popenargs else kwargs.get("args")
     command = _authorize_active_shell(
         command,
         api="subprocess.Popen",
         shell=bool(kwargs.get("shell", False)),
         cwd=kwargs.get("cwd"),
+        executable=kwargs.get("executable"),
     )
     if popenargs:
         popenargs = (command, *popenargs[1:])
@@ -293,6 +305,28 @@ def _freeze_command(command: Any) -> Any:
 def _freeze_cwd(cwd: Any) -> Any:
     """Resolve a path-like *cwd* once, so the evaluated directory is the one used."""
     return os.fspath(cwd) if isinstance(cwd, os.PathLike) else cwd
+
+
+def _freeze_executable(executable: Any) -> Any:
+    """Resolve a path-like *executable* once, so the evaluated program is the one run."""
+    return os.fspath(executable) if isinstance(executable, os.PathLike) else executable
+
+
+def _policy_executable(args: list[str], *, shell: bool, executable: Any) -> str:
+    """Name the program that will actually run, which is what policy keys on.
+
+    Popen's ``executable=`` replaces the program while leaving argv[0] alone, and
+    a shell string runs under the platform shell whatever it names first, so
+    neither may be reported as the basename of argv[0]. The full shell text
+    stays in ``command`` for policies that inspect it.
+    """
+    if executable is not None:
+        return Path(_stringify_arg(executable)).name
+    if shell:
+        if os.name == "nt":
+            return Path(os.environ.get("COMSPEC") or "cmd.exe").name
+        return "sh"
+    return Path(args[0]).name if args else ""
 
 
 def _command_args(command: Any, *, shell: bool) -> list[str]:

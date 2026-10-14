@@ -585,3 +585,50 @@ def test_cli_reports_deny(
     )
     assert cli_main(["--manifest", "policy.yaml", "danger"]) == 1
     assert '"decision": "deny"' in capsys.readouterr().out
+
+
+def _shell_name() -> str:
+    if os.name == "nt":
+        return Path(os.environ.get("COMSPEC") or "cmd.exe").name
+    return "sh"
+
+
+@pytest.mark.parametrize(
+    "call, text",
+    [
+        (lambda c: subprocess.run(c, shell=True, check=False), "rm f"),
+        (lambda c: subprocess.run(c, shell=True, check=False), "true; rm f"),
+        (lambda c: subprocess.run(c.encode(), shell=True, check=False), "rm f"),
+        (lambda c: os.system(c), "rm f"),
+        (lambda c: os.popen(c), "rm f"),
+    ],
+    ids=["run-shell", "run-shell-chained", "run-shell-bytes", "os-system", "os-popen"],
+)
+def test_shell_string_reports_the_shell_as_executable(
+    monkeypatch: pytest.MonkeyPatch, call: Any, text: str
+) -> None:
+    ran: list[Any] = []
+    monkeypatch.setattr(os, "system", lambda command: ran.append(command) or 0)
+    monkeypatch.setattr(
+        os, "popen", lambda command, mode="r", buffering=-1: ran.append(command)
+    )
+    skill = GovernanceSkill(FakeControl([result(acs.Decision.DENY)]))
+    with governed_shell(skill), pytest.raises(ShellPolicyViolation):
+        call(text)
+    assert ran == []
+    args = skill.session.control.requests[0][1]["tool_call"]["args"]
+    assert args["executable"] == _shell_name()
+    assert args["command"] == text
+    assert args["shell"] is True
+
+
+def test_popen_executable_keyword_is_what_policy_sees(tmp_path: Path) -> None:
+    marker = tmp_path / "must-survive"
+    marker.write_text("x")
+    skill = GovernanceSkill(FakeControl([result(acs.Decision.DENY)]))
+    with governed_shell(skill), pytest.raises(ShellPolicyViolation):
+        subprocess.run(["x", str(marker)], executable="/bin/rm", check=False)
+    assert marker.exists()
+    args = skill.session.control.requests[0][1]["tool_call"]["args"]
+    assert args["executable"] == "rm"
+    assert args["argv"] == ["x", str(marker)]
