@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextvars
+import inspect
 import os
 import shlex
 import subprocess
@@ -199,17 +200,18 @@ def _authorize_active_shell(
     shell: bool = False,
     cwd: Any = None,
     executable: Any = None,
-) -> Any:
+) -> tuple[Any, bool]:
+    """Return the command to run and whether a TRANSFORM verdict replaced it."""
     if getattr(_SHELL_PATCH_LOCAL, "bypass", False):
-        return command
+        return command, False
     stack = _ACTIVE_SHELL_SKILLS.get()
     if not stack:
-        return command
+        return command, False
     skill, context = stack[-1]
-    transformed, _ = skill.authorize_shell_command(
+    transformed, result = skill.authorize_shell_command(
         command, api=api, shell=shell, cwd=cwd, context=context, executable=executable
     )
-    return transformed
+    return transformed, result.verdict.decision is Decision.TRANSFORM
 
 
 def _with_popen_bypass(callable_obj: Any, *args: Any, **kwargs: Any) -> Any:
@@ -221,59 +223,104 @@ def _with_popen_bypass(callable_obj: Any, *args: Any, **kwargs: Any) -> Any:
         _SHELL_PATCH_LOCAL.bypass = previous
 
 
-def _governed_subprocess_run(*popenargs: Any, **kwargs: Any) -> Any:
-    originals = _SHELL_ORIGINALS
+# Popen's positional parameters after ``args``, in order. ``subprocess.run``
+# forwards its positionals to Popen, so both wrappers bind them by these names.
+_POPEN_POSITIONAL = tuple(
+    parameter.name
+    for parameter in inspect.signature(subprocess.Popen).parameters.values()
+    if parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+)
+
+
+def _bind_popen_args(
+    popenargs: tuple[Any, ...], kwargs: dict[str, Any], *, api: str
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    """Move every positional after ``args`` into *kwargs* under its Popen name.
+
+    ``Popen(["x", f], -1, "/bin/rm")`` sets ``executable`` and the ninth
+    positional sets ``shell``, so reading only *kwargs* would evaluate a
+    different program from the one that runs. A value given both ways raises
+    the same TypeError Popen would, before anything is evaluated or run.
+    """
+    if len(popenargs) <= 1:
+        return popenargs, kwargs
+    if len(popenargs) > len(_POPEN_POSITIONAL):
+        raise TypeError(
+            f"{api}() takes at most {len(_POPEN_POSITIONAL)} positional "
+            f"arguments ({len(popenargs)} given)"
+        )
+    bound = dict(kwargs)
+    for name, value in zip(_POPEN_POSITIONAL[1:], popenargs[1:]):
+        if name in bound:
+            raise TypeError(f"{api}() got multiple values for argument {name!r}")
+        bound[name] = value
+    return popenargs[:1], bound
+
+
+def _governed_popen_call(
+    original: Any,
+    api: str,
+    popenargs: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    bypass_nested_popen: bool = False,
+) -> Any:
+    popenargs, kwargs = _bind_popen_args(popenargs, kwargs, api=api)
     if "cwd" in kwargs:
         kwargs["cwd"] = _freeze_cwd(kwargs["cwd"])
     if "executable" in kwargs:
         kwargs["executable"] = _freeze_executable(kwargs["executable"])
     command = popenargs[0] if popenargs else kwargs.get("args")
-    command = _authorize_active_shell(
+    command, transformed = _authorize_active_shell(
         command,
-        api="subprocess.run",
+        api=api,
         shell=bool(kwargs.get("shell", False)),
         cwd=kwargs.get("cwd"),
         executable=kwargs.get("executable"),
     )
+    if transformed:
+        # The caller's executable= would still replace the program the policy
+        # chose, so a transform runs argv[0] (or the default shell) instead.
+        kwargs.pop("executable", None)
     if popenargs:
-        popenargs = (command, *popenargs[1:])
+        popenargs = (command,)
     else:
         kwargs["args"] = command
-    return _with_popen_bypass(originals["subprocess.run"], *popenargs, **kwargs)
+    if bypass_nested_popen:
+        # subprocess.run constructs Popen itself; that call is already governed.
+        return _with_popen_bypass(original, *popenargs, **kwargs)
+    return original(*popenargs, **kwargs)
+
+
+def _governed_subprocess_run(*popenargs: Any, **kwargs: Any) -> Any:
+    originals = _SHELL_ORIGINALS
+    return _governed_popen_call(
+        originals["subprocess.run"],
+        "subprocess.run",
+        popenargs,
+        kwargs,
+        bypass_nested_popen=True,
+    )
 
 
 def _governed_subprocess_popen(*popenargs: Any, **kwargs: Any) -> Any:
     originals = _SHELL_ORIGINALS
     if getattr(_SHELL_PATCH_LOCAL, "bypass", False):
         return originals["subprocess.Popen"](*popenargs, **kwargs)
-    if "cwd" in kwargs:
-        kwargs["cwd"] = _freeze_cwd(kwargs["cwd"])
-    if "executable" in kwargs:
-        kwargs["executable"] = _freeze_executable(kwargs["executable"])
-    command = popenargs[0] if popenargs else kwargs.get("args")
-    command = _authorize_active_shell(
-        command,
-        api="subprocess.Popen",
-        shell=bool(kwargs.get("shell", False)),
-        cwd=kwargs.get("cwd"),
-        executable=kwargs.get("executable"),
+    return _governed_popen_call(
+        originals["subprocess.Popen"], "subprocess.Popen", popenargs, kwargs
     )
-    if popenargs:
-        popenargs = (command, *popenargs[1:])
-    else:
-        kwargs["args"] = command
-    return originals["subprocess.Popen"](*popenargs, **kwargs)
 
 
 def _governed_os_system(command: Any) -> int:
     originals = _SHELL_ORIGINALS
-    transformed = _authorize_active_shell(command, api="os.system", shell=True)
+    transformed, _ = _authorize_active_shell(command, api="os.system", shell=True)
     return originals["os.system"](transformed)
 
 
 def _governed_os_popen(command: Any, mode: str = "r", buffering: int = -1) -> Any:
     originals = _SHELL_ORIGINALS
-    transformed = _authorize_active_shell(command, api="os.popen", shell=True)
+    transformed, _ = _authorize_active_shell(command, api="os.popen", shell=True)
     return originals["os.popen"](transformed, mode, buffering)
 
 
@@ -317,8 +364,10 @@ def _policy_executable(args: list[str], *, shell: bool, executable: Any) -> str:
 
     Popen's ``executable=`` replaces the program while leaving argv[0] alone, and
     a shell string runs under the platform shell whatever it names first, so
-    neither may be reported as the basename of argv[0]. The full shell text
-    stays in ``command`` for policies that inspect it.
+    neither may be reported as the basename of argv[0]. With ``shell=True`` the
+    reported executable is the shell, so a rule keyed on ``executable`` alone
+    never sees the program named in the string; policies must match on
+    ``command``, which holds the full shell text.
     """
     if executable is not None:
         return Path(_stringify_arg(executable)).name

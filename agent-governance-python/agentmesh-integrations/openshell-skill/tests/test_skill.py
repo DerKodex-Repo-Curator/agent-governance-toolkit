@@ -593,14 +593,24 @@ def _shell_name() -> str:
     return "sh"
 
 
+def _os_system(command: str) -> Any:
+    # Looked up at call time: a bare os.system in the parametrize list is bound
+    # at collection to the unpatched C function and would run the command.
+    return os.system(command)
+
+
+def _os_popen(command: str) -> Any:
+    return os.popen(command)
+
+
 @pytest.mark.parametrize(
     "call, text",
     [
         (lambda c: subprocess.run(c, shell=True, check=False), "rm f"),
         (lambda c: subprocess.run(c, shell=True, check=False), "true; rm f"),
         (lambda c: subprocess.run(c.encode(), shell=True, check=False), "rm f"),
-        (lambda c: os.system(c), "rm f"),
-        (lambda c: os.popen(c), "rm f"),
+        (_os_system, "rm f"),
+        (_os_popen, "rm f"),
     ],
     ids=["run-shell", "run-shell-chained", "run-shell-bytes", "os-system", "os-popen"],
 )
@@ -632,3 +642,119 @@ def test_popen_executable_keyword_is_what_policy_sees(tmp_path: Path) -> None:
     args = skill.session.control.requests[0][1]["tool_call"]["args"]
     assert args["executable"] == "rm"
     assert args["argv"] == ["x", str(marker)]
+
+
+class DenyExecutableControl(FakeControl):
+    """Denies any command whose evaluated executable is ``rm``."""
+
+    async def evaluate_intervention_point(self, point, snapshot, mode):
+        self.requests.append((point, snapshot, mode))
+        if snapshot["tool_call"]["args"]["executable"] == "rm":
+            return result(acs.Decision.DENY, reason="rm-denied")
+        return result(acs.Decision.ALLOW)
+
+
+# These look up subprocess.run and subprocess.Popen at call time. A bare
+# ``subprocess.run`` in a parametrize list is bound at collection, before
+# governed_shell patches the module, and would call the ungoverned original.
+def _run(*args: Any, check: bool = False, **kwargs: Any) -> Any:
+    return subprocess.run(*args, check=check, **kwargs)
+
+
+def _popen(*args: Any, **kwargs: Any) -> Any:
+    return subprocess.Popen(*args, **kwargs)
+
+
+def _popen_and_wait(*args: Any, **kwargs: Any) -> Any:
+    process = subprocess.Popen(*args, **kwargs)
+    process.communicate()
+    return process
+
+
+@pytest.mark.parametrize("call", [_run, _popen_and_wait], ids=["run", "popen"])
+def test_positional_executable_is_what_policy_sees(call: Any, tmp_path: Path) -> None:
+    """``Popen(args, bufsize, executable)`` must not hide the real program."""
+    marker = tmp_path / "must-survive"
+    marker.write_text("x")
+    control = DenyExecutableControl()
+    with (
+        governed_shell(GovernanceSkill(control)),
+        pytest.raises(ShellPolicyViolation, match="rm-denied"),
+    ):
+        call(["x", str(marker)], -1, "/bin/rm")
+    assert marker.exists()
+    args = control.requests[0][1]["tool_call"]["args"]
+    assert args["executable"] == "rm"
+    assert args["argv"] == ["x", str(marker)]
+
+
+@pytest.mark.parametrize("call", [_run, _popen], ids=["run", "popen"])
+def test_executable_given_twice_raises_before_evaluation(call: Any) -> None:
+    control = FakeControl()
+    with (
+        governed_shell(GovernanceSkill(control)),
+        pytest.raises(TypeError, match="multiple values for argument 'executable'"),
+    ):
+        call(["x"], -1, "/bin/rm", executable="/bin/true")
+    assert control.requests == []
+
+
+def test_positional_shell_is_what_policy_sees() -> None:
+    """The ninth positional is ``shell``; policy must see the shell, not argv[0]."""
+    control = FakeControl([result(acs.Decision.DENY)])
+    with governed_shell(GovernanceSkill(control)), pytest.raises(ShellPolicyViolation):
+        subprocess.run(
+            "echo ok; rm f", -1, None, None, None, None, None, True, True, check=False
+        )
+    args = control.requests[0][1]["tool_call"]["args"]
+    assert args["shell"] is True
+    assert args["executable"] == _shell_name()
+    assert args["command"] == "echo ok; rm f"
+
+
+@pytest.mark.parametrize(
+    "call, positional",
+    [
+        (_run, False),
+        (_run, True),
+        (_popen_and_wait, False),
+        (_popen_and_wait, True),
+    ],
+    ids=["run-keyword", "run-positional", "popen-keyword", "popen-positional"],
+)
+def test_transform_drops_caller_executable(
+    call: Any, positional: bool, tmp_path: Path
+) -> None:
+    """A transformed argv runs as itself, not under the caller's ``executable=``."""
+    marker = tmp_path / "transformed-ran"
+    target = {
+        "argv": [sys.executable, "-c", f"open({str(marker)!r}, 'w').close()"],
+        "command": "python -c transformed",
+    }
+    # Forwarding this executable would raise FileNotFoundError instead.
+    missing = str(tmp_path / "no-such-program")
+    skill = GovernanceSkill(
+        FakeControl([result(acs.Decision.TRANSFORM, transformed=target)])
+    )
+    with governed_shell(skill):
+        if positional:
+            call(["x"], -1, missing)
+        else:
+            call(["x"], executable=missing)
+    assert marker.exists()
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or not Path("/bin/rm").exists(), reason="needs POSIX /bin/rm"
+)
+@pytest.mark.parametrize("call", [_run, _popen_and_wait], ids=["run", "popen"])
+def test_transform_to_echo_does_not_run_caller_rm(call: Any, tmp_path: Path) -> None:
+    marker = tmp_path / "must-survive"
+    marker.write_text("x")
+    target = {"argv": ["echo", str(marker)], "command": f"echo {marker}"}
+    skill = GovernanceSkill(
+        FakeControl([result(acs.Decision.TRANSFORM, transformed=target)])
+    )
+    with governed_shell(skill):
+        call(["rm", str(marker)], executable="/bin/rm")
+    assert marker.exists()
